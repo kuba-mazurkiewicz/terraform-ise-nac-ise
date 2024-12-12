@@ -90,10 +90,11 @@ resource "ise_trustsec_egress_matrix_cell" "trustsec_egress_matrix_cell" {
   depends_on = [time_sleep.sgt_wait]
 }
 
-resource "ise_trustsec_egress_matrix_cell_default" "trustsec_egress_matrix_cell_any_any" {
+resource "ise_trustsec_egress_matrix_cell" "trustsec_egress_matrix_cell_any_any" {
   for_each = local.trustsec_matrix_any_any
 
-  description        = try(each.value.description, local.defaults.ise.trust_sec.matrix_entries.description, null)
+  source_sgt_id      = "92bb1950-8c01-11e6-996c-525400b48521"
+  destination_sgt_id = "92bb1950-8c01-11e6-996c-525400b48521"
   matrix_cell_status = try(each.value.rule_status, local.defaults.ise.trust_sec.matrix_entries.rule_status, null)
   default_rule       = try(each.value.sgacl_name, local.defaults.ise.trust_sec.matrix_entries.rule_status, null) == "Deny IP" ? "DENY_IP" : try(each.value.sgacl_name, local.defaults.ise.trust_sec.matrix_entries.rule_status, null) == "Permit IP" ? "PERMIT_IP" : null
 }
