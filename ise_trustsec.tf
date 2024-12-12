@@ -1,15 +1,16 @@
 locals {
-  trustsec_matrix = { for cell in try(local.ise.trust_sec.matrix_entries, []) : "${cell.source_sgt}-${cell.destination_sgt}" => cell }
-  unique_sgts     = distinct(concat([for key, value in local.trustsec_matrix : value.source_sgt], [for key, value in local.trustsec_matrix : value.destination_sgt], [for map in try(local.ise.trust_sec.ip_sgt_mappings, []) : try(map.sgt, null) if try(map.sgt, null) != null], [for map in try(local.ise.trust_sec.ip_sgt_mapping_groups, []) : try(map.sgt, null) if try(map.sgt, null) != null]))
-  known_sgts      = [for group in try(local.ise.trust_sec.security_groups, []) : group.name]
-  unknown_sgts    = setsubtract(local.unique_sgts, local.known_sgts)
-  unique_sgacls   = distinct([for key, value in local.trustsec_matrix : value.sgacl_name])
-  known_sgacls    = [for acl in try(local.ise.trust_sec.security_group_acls, []) : acl.name]
-  unknown_sgacls  = setsubtract(local.unique_sgacls, local.known_sgacls)
+  trustsec_matrix         = { for cell in try(local.ise.trust_sec.matrix_entries, []) : "${cell.source_sgt}-${cell.destination_sgt}" => cell if cell.source_sgt != "ANY" && cell.destination_sgt != "ANY" }
+  trustsec_matrix_any_any = { for cell in try(local.ise.trust_sec.matrix_entries, []) : "${cell.source_sgt}-${cell.destination_sgt}" => cell if cell.source_sgt == "ANY" && cell.destination_sgt == "ANY" }
+  unique_sgts             = distinct(concat([for key, value in local.trustsec_matrix : value.source_sgt], [for key, value in local.trustsec_matrix : value.destination_sgt], [for map in try(local.ise.trust_sec.ip_sgt_mappings, []) : try(map.sgt, null) if try(map.sgt, null) != null], [for map in try(local.ise.trust_sec.ip_sgt_mapping_groups, []) : try(map.sgt, null) if try(map.sgt, null) != null]))
+  known_sgts              = [for group in try(local.ise.trust_sec.security_groups, []) : group.name]
+  unknown_sgts            = setsubtract(local.unique_sgts, local.known_sgts)
+  unique_sgacls           = distinct([for key, value in local.trustsec_matrix : value.sgacl_name])
+  known_sgacls            = [for acl in try(local.ise.trust_sec.security_group_acls, []) : acl.name]
+  unknown_sgacls          = setsubtract(local.unique_sgacls, local.known_sgacls)
 }
 
 data "ise_trustsec_security_group" "trustsec_security_group" {
-  for_each = toset(local.unknown_sgts)
+  for_each = { for sgt in local.unknown_sgts : sgt => sgt if sgt != "ANY" }
 
   name = each.value
 }
@@ -87,4 +88,13 @@ resource "ise_trustsec_egress_matrix_cell" "trustsec_egress_matrix_cell" {
   }
 
   depends_on = [time_sleep.sgt_wait]
+}
+
+resource "ise_trustsec_egress_matrix_cell" "trustsec_egress_matrix_cell_any_any" {
+  for_each = local.trustsec_matrix_any_any
+
+  source_sgt_id      = "92bb1950-8c01-11e6-996c-525400b48521"
+  destination_sgt_id = "92bb1950-8c01-11e6-996c-525400b48521"
+  matrix_cell_status = try(each.value.rule_status, local.defaults.ise.trust_sec.matrix_entries.rule_status, null)
+  default_rule       = try(each.value.sgacl_name, local.defaults.ise.trust_sec.matrix_entries.rule_status, null) == "Deny IP" ? "DENY_IP" : try(each.value.sgacl_name, local.defaults.ise.trust_sec.matrix_entries.rule_status, null) == "Permit IP" ? "PERMIT_IP" : null
 }
